@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rastreador de Grupos K-Pop (Local)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -122,6 +123,13 @@
             </button>
         </div>
 
+        <!-- Botón de Generar Enlace -->
+        <div class="mb-6">
+            <button id="generateLinkButton" class="w-full px-6 py-3 bg-indigo-500 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-600 focus:outline-none transition duration-200 transform hover:scale-105">
+                Generar Enlace Compartible
+            </button>
+        </div>
+
         <!-- Mensaje de alerta -->
         <div id="messageBox" class="p-4 rounded-lg text-sm transition-all duration-300 hidden"></div>
 
@@ -192,19 +200,21 @@
         let groupData = [];
         let currentPage = 1;
         const groupsPerPage = 10;
-        let groupNameInput, debutYearInput, groupTypeInput, profilePicInput, mainActionButton, cancelEditButton, addAlbumButton, albumsContainer, groupList, messageBox, songsModal, modalTitle, modalSongList, closeButton, confirmModal, confirmMessage, confirmYesButton, confirmNoButton, exportButton, importButton, searchInput, groupTypeFilter, sortSelect, paginationControls;
+        let groupNameInput, debutYearInput, groupTypeInput, profilePicInput, mainActionButton, cancelEditButton, addAlbumButton, albumsContainer, groupList, messageBox, songsModal, modalTitle, modalSongList, closeButton, confirmModal, confirmMessage, confirmYesButton, confirmNoButton, exportButton, importButton, searchInput, groupTypeFilter, sortSelect, paginationControls, generateLinkButton;
 
         function showMessage(message, type) {
             messageBox.textContent = message;
-            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
             if (type === 'error') {
                 messageBox.classList.add('bg-red-100', 'text-red-700');
             } else if (type === 'success') {
                 messageBox.classList.add('bg-green-100', 'text-green-700');
+            } else if (type === 'info') {
+                messageBox.classList.add('bg-blue-100', 'text-blue-700');
             }
             setTimeout(() => {
                 messageBox.classList.add('hidden');
-            }, 3000);
+            }, 5000); // 5 segundos para que el usuario pueda copiar el enlace
         }
 
         function clearForm() {
@@ -430,7 +440,7 @@
                 try {
                     groupData = JSON.parse(storedData);
                 } catch (e) {
-                    console.error("Error parsing local storage data:", e);
+                    console.error("Error al analizar los datos del almacenamiento local:", e);
                     groupData = [];
                 }
             }
@@ -488,6 +498,53 @@
             document.body.appendChild(input);
             input.click();
             document.body.removeChild(input);
+        }
+
+        function generateShareableLink() {
+            try {
+                const jsonData = JSON.stringify(groupData);
+                const compressed = pako.deflate(jsonData, { to: 'string' });
+                const base64 = btoa(compressed);
+                const url = `${window.location.protocol}//${window.location.host}${window.location.pathname}?data=${encodeURIComponent(base64)}`;
+                
+                // Copiar al portapapeles
+                const tempInput = document.createElement('textarea');
+                tempInput.value = url;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                
+                showMessage('Enlace copiado al portapapeles. ¡Compártelo para sincronizar tus datos!', 'info');
+
+            } catch (error) {
+                console.error("Error al generar el enlace:", error);
+                showMessage('Error al generar el enlace. Demasiados datos para el URL.', 'error');
+            }
+        }
+
+        function loadFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const encodedData = urlParams.get('data');
+            if (encodedData) {
+                try {
+                    const base64 = decodeURIComponent(encodedData);
+                    const compressed = atob(base64);
+                    const decompressed = pako.inflate(compressed, { to: 'string' });
+                    const parsedData = JSON.parse(decompressed);
+                    if (Array.isArray(parsedData)) {
+                        groupData = parsedData;
+                        saveGroupsToLocalStorage();
+                        updateDisplay();
+                        showMessage('Datos cargados desde el enlace.', 'success');
+                    } else {
+                        showMessage('Datos de enlace no válidos.', 'error');
+                    }
+                } catch (error) {
+                    console.error("Error al cargar los datos del enlace:", error);
+                    showMessage('Error al cargar datos del enlace.', 'error');
+                }
+            }
         }
 
         function updateDisplay() {
@@ -596,6 +653,7 @@
             groupTypeFilter = document.getElementById('groupTypeFilter');
             sortSelect = document.getElementById('sortSelect');
             paginationControls = document.getElementById('paginationControls');
+            generateLinkButton = document.getElementById('generateLinkButton');
             
             closeButton.addEventListener('click', () => {
                 songsModal.style.display = 'none';
@@ -690,14 +748,16 @@
                 updateDisplay();
             });
 
-
             exportButton.addEventListener('click', exportData);
             importButton.addEventListener('click', importData);
+            generateLinkButton.addEventListener('click', generateShareableLink);
 
             loadGroupsFromLocalStorage();
+            loadFromURL();
         }
         
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
+
