@@ -54,6 +54,13 @@
             text-decoration: none;
             cursor: pointer;
         }
+        .song-list-item:hover {
+            background-color: #f0f4f8;
+        }
+        .edit-buttons {
+            display: flex;
+            gap: 8px;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
@@ -61,7 +68,7 @@
     <div class="container mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-200">
         <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Rastreador de Grupos K-Pop</h1>
 
-        <!-- Formulario para añadir grupo y álbumes -->
+        <!-- Formulario para añadir/editar grupo y álbumes -->
         <div class="space-y-4 mb-6">
             <input type="text" id="groupNameInput" placeholder="Nombre del grupo (ej. BTS)"
                    class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 transition duration-200">
@@ -92,9 +99,13 @@
                 </div>
             </div>
 
-            <button id="addButton"
+            <button id="mainActionButton"
                     class="w-full px-6 py-3 bg-pink-500 text-white font-semibold rounded-lg shadow-md hover:bg-pink-600 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 transition duration-200 transform hover:scale-105">
                 Añadir Grupo
+            </button>
+            <button id="cancelEditButton"
+                    class="w-full px-6 py-3 bg-gray-400 text-white font-semibold rounded-lg shadow-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition duration-200 transform hover:scale-105 hidden">
+                Cancelar Edición
             </button>
         </div>
 
@@ -127,7 +138,8 @@
             const debutYearInput = document.getElementById('debutYearInput');
             const groupTypeInput = document.getElementById('groupTypeInput');
             const profilePicInput = document.getElementById('profilePicInput');
-            const addButton = document.getElementById('addButton');
+            const mainActionButton = document.getElementById('mainActionButton');
+            const cancelEditButton = document.getElementById('cancelEditButton');
             const addAlbumButton = document.getElementById('addAlbumButton');
             const albumsContainer = document.getElementById('albumsContainer');
             const groupList = document.getElementById('groupList');
@@ -140,6 +152,7 @@
 
             // Usamos un objeto Map para almacenar los grupos localmente
             const groups = new Map();
+            let editingGroupKey = null;
 
             // Cargar datos desde localStorage al iniciar
             function loadGroups() {
@@ -171,17 +184,29 @@
                 }, 3000);
             }
 
-            function addAlbumField() {
+            function clearForm() {
+                groupNameInput.value = '';
+                debutYearInput.value = '';
+                groupTypeInput.value = '';
+                profilePicInput.value = '';
+                albumsContainer.innerHTML = '';
+                mainActionButton.textContent = 'Añadir Grupo';
+                cancelEditButton.classList.add('hidden');
+                editingGroupKey = null;
+                groupNameInput.removeAttribute('disabled');
+            }
+
+            function addAlbumField(album = {}) {
                 const albumFieldWrapper = document.createElement('div');
                 albumFieldWrapper.className = 'album-field-wrapper border p-3 rounded-lg bg-gray-50 space-y-2';
                 albumFieldWrapper.innerHTML = `
                     <div class="flex flex-col sm:flex-row gap-2">
                         <input type="text" placeholder="Nombre del álbum"
-                            class="album-name-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500">
+                            class="album-name-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.name || ''}">
                         <input type="url" placeholder="URL de la foto del álbum"
-                            class="album-url-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500">
+                            class="album-url-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.photoUrl || ''}">
                         <input type="date"
-                            class="album-date-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500">
+                            class="album-date-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.releaseDate || ''}">
                         <button type="button" class="remove-album-button px-2 py-1 text-sm text-red-500 hover:text-red-700 font-bold">
                             ×
                         </button>
@@ -194,24 +219,33 @@
                 `;
                 albumsContainer.appendChild(albumFieldWrapper);
 
+                // Añadir canciones si existen
+                const songList = albumFieldWrapper.querySelector('.song-list');
+                if (album.songs && album.songs.length > 0) {
+                    album.songs.forEach(song => addSongField(songList, song));
+                }
+
                 const removeButton = albumFieldWrapper.querySelector('.remove-album-button');
                 removeButton.addEventListener('click', () => albumFieldWrapper.remove());
 
                 const addSongButton = albumFieldWrapper.querySelector('.add-song-button');
                 addSongButton.addEventListener('click', () => {
-                    const songList = albumFieldWrapper.querySelector('.song-list');
-                    const songField = document.createElement('div');
-                    songField.className = 'flex gap-2 items-center';
-                    songField.innerHTML = `
-                        <input type="text" placeholder="Nombre de la canción"
-                               class="song-name-input flex-1 p-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400">
-                        <button type="button" class="remove-song-button text-xs text-red-400 hover:text-red-600 font-bold leading-none">
-                            ×
-                        </button>
-                    `;
-                    songList.appendChild(songField);
-                    songField.querySelector('.remove-song-button').addEventListener('click', () => songField.remove());
+                    addSongField(songList);
                 });
+            }
+
+            function addSongField(songList, songName = '') {
+                const songField = document.createElement('div');
+                songField.className = 'flex gap-2 items-center';
+                songField.innerHTML = `
+                    <input type="text" placeholder="Nombre de la canción"
+                           class="song-name-input flex-1 p-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400" value="${songName}">
+                    <button type="button" class="remove-song-button text-xs text-red-400 hover:text-red-600 font-bold leading-none">
+                        ×
+                    </button>
+                `;
+                songList.appendChild(songField);
+                songField.querySelector('.remove-song-button').addEventListener('click', () => songField.remove());
             }
 
             function renderGroupList() {
@@ -224,12 +258,12 @@
                 } else {
                     groups.forEach(group => {
                         const listItem = document.createElement('li');
-                        listItem.className = 'py-4 px-4 flex flex-col list-item cursor-pointer';
+                        listItem.className = 'py-4 px-4 flex flex-col list-item';
 
                         const header = document.createElement('div');
-                        header.className = 'flex items-center justify-between mb-2';
+                        header.className = 'flex items-center justify-between mb-2 cursor-pointer';
                         header.innerHTML = `
-                            <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-4 flex-1">
                                 ${group.profilePic ? `<img src="${group.profilePic}" alt="${group.name}" class="w-12 h-12 rounded-full object-cover shadow-sm border border-gray-200">` : ''}
                                 <div>
                                     <div class="font-bold text-gray-800 text-lg">${group.name}</div>
@@ -238,9 +272,16 @@
                                     </div>
                                 </div>
                             </div>
-                            <button class="text-gray-400 hover:text-red-500 font-bold text-xl leading-none transition duration-200 delete-group-button" data-group-name="${group.name.toLowerCase()}">
-                                ×
-                            </button>
+                            <div class="flex items-center space-x-2 edit-buttons">
+                                <button class="text-gray-400 hover:text-blue-500 font-bold text-lg leading-none transition duration-200 edit-group-button" data-group-name="${group.name.toLowerCase()}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+                                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                    </svg>
+                                </button>
+                                <button class="text-gray-400 hover:text-red-500 font-bold text-xl leading-none transition duration-200 delete-group-button" data-group-name="${group.name.toLowerCase()}">
+                                    ×
+                                </button>
+                            </div>
                         `;
 
                         const albumsContainerEl = document.createElement('div');
@@ -265,20 +306,25 @@
                             `;
                         }
                         
+                        // Añadir evento para mostrar/ocultar los álbumes
                         header.addEventListener('click', (e) => {
-                            if (!e.target.closest('.delete-group-button')) {
+                            // Prevenir que el clic en los botones de editar/borrar active el toggle
+                            if (!e.target.closest('.delete-group-button') && !e.target.closest('.edit-group-button')) {
                                 albumsContainerEl.classList.toggle('hidden');
                             }
                         });
-
+                        
+                        // Añadir evento para los álbumes
                         albumsContainerEl.querySelectorAll('.album-card').forEach(albumCard => {
                             albumCard.addEventListener('click', () => {
-                                const albumIndex = albumCard.dataset.album-index;
+                                const albumIndex = parseInt(albumCard.dataset.albumIndex);
                                 const album = group.albums[albumIndex];
-                                showSongsModal(album);
+                                if (album) {
+                                    showSongsModal(album);
+                                }
                             });
                         });
-
+                        
                         listItem.appendChild(header);
                         listItem.appendChild(albumsContainerEl);
                         groupList.appendChild(listItem);
@@ -291,6 +337,25 @@
                             renderGroupList();
                             showMessage(`Se ha eliminado '${groupName}'.`, 'error');
                         });
+
+                        // Editar grupo
+                        listItem.querySelector('.edit-group-button').addEventListener('click', () => {
+                            const groupName = listItem.querySelector('.font-bold').textContent;
+                            editingGroupKey = groupName.toLowerCase();
+                            const groupToEdit = groups.get(editingGroupKey);
+                            
+                            groupNameInput.value = groupToEdit.name;
+                            groupNameInput.setAttribute('disabled', 'true'); // No se puede cambiar el nombre del grupo
+                            debutYearInput.value = groupToEdit.year;
+                            groupTypeInput.value = groupToEdit.type;
+                            profilePicInput.value = groupToEdit.profilePic;
+
+                            albumsContainer.innerHTML = '';
+                            groupToEdit.albums.forEach(album => addAlbumField(album));
+
+                            mainActionButton.textContent = 'Guardar Cambios';
+                            cancelEditButton.classList.remove('hidden');
+                        });
                     });
                 }
             }
@@ -301,7 +366,7 @@
                 if (album.songs && album.songs.length > 0) {
                     album.songs.forEach(song => {
                         const songItem = document.createElement('li');
-                        songItem.className = 'bg-gray-100 p-2 rounded-lg text-sm text-gray-800';
+                        songItem.className = 'bg-gray-100 p-2 rounded-lg text-sm text-gray-800 song-list-item';
                         songItem.textContent = song;
                         modalSongList.appendChild(songItem);
                     });
@@ -324,7 +389,7 @@
                 }
             });
 
-            addButton.addEventListener('click', () => {
+            mainActionButton.addEventListener('click', () => {
                 const groupName = groupNameInput.value.trim();
                 const debutYear = debutYearInput.value.trim();
                 const groupType = groupTypeInput.value;
@@ -332,7 +397,7 @@
 
                 if (groupName && debutYear && groupType) {
                     const groupNameKey = groupName.toLowerCase();
-                    if (groups.has(groupNameKey)) {
+                    if (!editingGroupKey && groups.has(groupNameKey)) {
                         showMessage(`'${groupName}' ya está en la lista.`, 'error');
                         return;
                     }
@@ -374,25 +439,21 @@
                     groups.set(groupNameKey, newGroup);
                     saveGroups();
                     renderGroupList();
-                    showMessage(`'${groupName}' añadido correctamente.`, 'success');
+                    showMessage(`'${groupName}' ${editingGroupKey ? 'actualizado' : 'añadido'} correctamente.`, 'success');
                     
-                    // Limpiar campos del formulario
-                    groupNameInput.value = '';
-                    debutYearInput.value = '';
-                    groupTypeInput.value = '';
-                    profilePicInput.value = '';
-                    albumsContainer.innerHTML = '';
+                    clearForm();
                 } else {
                     showMessage('Por favor, rellena los campos obligatorios: Nombre del grupo, Año de debut y Tipo de grupo.', 'error');
                 }
             });
 
-            addAlbumButton.addEventListener('click', addAlbumField);
+            cancelEditButton.addEventListener('click', clearForm);
+            addAlbumButton.addEventListener('click', () => addAlbumField());
 
             // Manejar la tecla Enter en el campo de nombre del grupo
             groupNameInput.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
-                    addButton.click();
+                    mainActionButton.click();
                 }
             });
             
