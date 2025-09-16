@@ -68,7 +68,7 @@
     <div class="container mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-200">
         <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Rastreador de Grupos K-Pop</h1>
         <div id="statusInfo" class="text-sm text-center mb-4 text-gray-500">
-            Cargando...
+            Conectando con Firebase...
         </div>
 
         <!-- Formulario para añadir/editar grupo y álbumes -->
@@ -167,306 +167,307 @@
         let db;
         let auth;
         let currentUserId = null;
+        let editingGroupKey = null;
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            const groupNameInput = document.getElementById('groupNameInput');
-            const debutYearInput = document.getElementById('debutYearInput');
-            const groupTypeInput = document.getElementById('groupTypeInput');
-            const profilePicInput = document.getElementById('profilePicInput');
-            const mainActionButton = document.getElementById('mainActionButton');
-            const cancelEditButton = document.getElementById('cancelEditButton');
-            const addAlbumButton = document.getElementById('addAlbumButton');
-            const albumsContainer = document.getElementById('albumsContainer');
-            const groupList = document.getElementById('groupList');
-            const messageBox = document.getElementById('messageBox');
-            const statusInfo = document.getElementById('statusInfo');
-            
-            const songsModal = document.getElementById('songsModal');
-            const modalTitle = document.getElementById('modalTitle');
-            const modalSongList = document.getElementById('modalSongList');
-            const closeButton = document.querySelector('.close-button');
+        // Variables de elementos del DOM (declaradas globalmente para ser accesibles)
+        let groupNameInput, debutYearInput, groupTypeInput, profilePicInput, mainActionButton, cancelEditButton, addAlbumButton, albumsContainer, groupList, messageBox, songsModal, modalTitle, modalSongList, closeButton, confirmModal, confirmMessage, confirmYesButton, confirmNoButton;
 
-            const confirmModal = document.getElementById('confirmModal');
-            const confirmMessage = document.getElementById('confirmMessage');
-            const confirmYesButton = document.getElementById('confirmYesButton');
-            const confirmNoButton = document.getElementById('confirmNoButton');
-
-            let editingGroupKey = null;
-
-            // Inicializar Firebase
-            try {
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                // Autenticar al usuario
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        currentUserId = user.uid;
-                        statusInfo.textContent = `Conectado. ID de usuario: ${currentUserId}`;
-                        setupRealtimeListener();
-                    } else {
-                        statusInfo.textContent = 'Desconectado.';
-                    }
-                });
-
-            } catch (error) {
-                console.error("Error al inicializar Firebase o autenticar:", error);
-                statusInfo.textContent = `Error de conexión: ${error.message}`;
+        // Funciones de utilidad
+        function showMessage(message, type) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-700');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-700');
             }
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 3000);
+        }
 
-            function setupRealtimeListener() {
-                const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
-                const q = query(collection(db, groupCollectionPath));
+        function clearForm() {
+            groupNameInput.value = '';
+            debutYearInput.value = '';
+            groupTypeInput.value = '';
+            profilePicInput.value = '';
+            albumsContainer.innerHTML = '';
+            mainActionButton.textContent = 'Añadir Grupo';
+            cancelEditButton.classList.add('hidden');
+            editingGroupKey = null;
+            groupNameInput.removeAttribute('disabled');
+        }
 
-                onSnapshot(q, (querySnapshot) => {
-                    // Si llegamos aquí, los datos se cargaron con éxito.
-                    const groupsData = [];
-                    querySnapshot.forEach((doc) => {
-                        groupsData.push({ ...doc.data(), id: doc.id });
-                    });
-                    
-                    const sortedGroups = groupsData.sort((a, b) => a.name.localeCompare(b.name));
-                    renderGroupList(sortedGroups);
-                }, (error) => {
-                    // Si hay un error, lo mostramos en el estado.
-                    console.error("Error al obtener datos en tiempo real:", error);
-                    statusInfo.textContent = `Error al cargar los datos. Por favor, revisa tus reglas de seguridad de Firestore.`;
-                    showMessage('Error: no se pueden cargar los datos. Revisa las reglas de seguridad.', 'error');
-                });
-            }
-
-            function showMessage(message, type) {
-                messageBox.textContent = message;
-                messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-                if (type === 'error') {
-                    messageBox.classList.add('bg-red-100', 'text-red-700');
-                } else if (type === 'success') {
-                    messageBox.classList.add('bg-green-100', 'text-green-700');
-                }
-                setTimeout(() => {
-                    messageBox.classList.add('hidden');
-                }, 3000);
-            }
-
-            function clearForm() {
-                groupNameInput.value = '';
-                debutYearInput.value = '';
-                groupTypeInput.value = '';
-                profilePicInput.value = '';
-                albumsContainer.innerHTML = '';
-                mainActionButton.textContent = 'Añadir Grupo';
-                cancelEditButton.classList.add('hidden');
-                editingGroupKey = null;
-                groupNameInput.removeAttribute('disabled');
-            }
-
-            function addAlbumField(album = {}) {
-                const albumFieldWrapper = document.createElement('div');
-                albumFieldWrapper.className = 'album-field-wrapper border p-3 rounded-lg bg-gray-50 space-y-2';
-                albumFieldWrapper.innerHTML = `
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <input type="text" placeholder="Nombre del álbum"
-                            class="album-name-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.name || ''}">
-                        <input type="url" placeholder="URL de la foto del álbum"
-                            class="album-url-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.photoUrl || ''}">
-                        <input type="date"
-                            class="album-date-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.releaseDate || ''}">
-                        <button type="button" class="remove-album-button px-2 py-1 text-sm text-red-500 hover:text-red-700 font-bold">
-                            ×
-                        </button>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-gray-600">Canciones:</span>
-                        <button type="button" class="add-song-button px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300 transition duration-200">+ Canción</button>
-                    </div>
-                    <div class="song-list space-y-1"></div>
-                `;
-                albumsContainer.appendChild(albumFieldWrapper);
-
-                // Añadir canciones si existen
-                const songList = albumFieldWrapper.querySelector('.song-list');
-                if (album.songs && album.songs.length > 0) {
-                    album.songs.forEach(song => addSongField(songList, song));
-                }
-
-                const removeButton = albumFieldWrapper.querySelector('.remove-album-button');
-                removeButton.addEventListener('click', () => albumFieldWrapper.remove());
-
-                const addSongButton = albumFieldWrapper.querySelector('.add-song-button');
-                addSongButton.addEventListener('click', () => {
-                    addSongField(songList);
-                });
-            }
-
-            function addSongField(songList, songName = '') {
-                const songField = document.createElement('div');
-                songField.className = 'flex gap-2 items-center';
-                songField.innerHTML = `
-                    <input type="text" placeholder="Nombre de la canción"
-                           class="song-name-input flex-1 p-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400" value="${songName}">
-                    <button type="button" class="remove-song-button text-xs text-red-400 hover:text-red-600 font-bold leading-none">
+        function addAlbumField(album = {}) {
+            const albumFieldWrapper = document.createElement('div');
+            albumFieldWrapper.className = 'album-field-wrapper border p-3 rounded-lg bg-gray-50 space-y-2';
+            albumFieldWrapper.innerHTML = `
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input type="text" placeholder="Nombre del álbum"
+                        class="album-name-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.name || ''}">
+                    <input type="url" placeholder="URL de la foto del álbum"
+                        class="album-url-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.photoUrl || ''}">
+                    <input type="date"
+                        class="album-date-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.releaseDate || ''}">
+                    <button type="button" class="remove-album-button px-2 py-1 text-sm text-red-500 hover:text-red-700 font-bold">
                         ×
                     </button>
-                `;
-                songList.appendChild(songField);
-                songField.querySelector('.remove-song-button').addEventListener('click', () => songField.remove());
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-600">Canciones:</span>
+                    <button type="button" class="add-song-button px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300 transition duration-200">+ Canción</button>
+                </div>
+                <div class="song-list space-y-1"></div>
+            `;
+            albumsContainer.appendChild(albumFieldWrapper);
+
+            const songList = albumFieldWrapper.querySelector('.song-list');
+            if (album.songs && album.songs.length > 0) {
+                album.songs.forEach(song => addSongField(songList, song));
             }
+
+            const removeButton = albumFieldWrapper.querySelector('.remove-album-button');
+            removeButton.addEventListener('click', () => albumFieldWrapper.remove());
+
+            const addSongButton = albumFieldWrapper.querySelector('.add-song-button');
+            addSongButton.addEventListener('click', () => {
+                addSongField(songList);
+            });
+        }
+        
+        function addSongField(container, song = '') {
+            const songFieldWrapper = document.createElement('div');
+            songFieldWrapper.className = 'flex gap-2';
+            songFieldWrapper.innerHTML = `
+                <input type="text" placeholder="Nombre de la canción"
+                    class="song-name-input flex-1 p-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${song}">
+                <button type="button" class="remove-song-button px-2 py-1 text-xs text-red-500 hover:text-red-700 font-bold">
+                    ×
+                </button>
+            `;
+            container.appendChild(songFieldWrapper);
+
+            const removeButton = songFieldWrapper.querySelector('.remove-song-button');
+            removeButton.addEventListener('click', () => songFieldWrapper.remove());
+        }
+
+        function showConfirmModal(message, onConfirm) {
+            confirmMessage.textContent = message;
+            confirmModal.style.display = 'flex';
             
-            // Función para mostrar el modal de confirmación
-            function showConfirmModal(message, onConfirm) {
-                confirmMessage.textContent = message;
-                confirmModal.style.display = 'flex';
-                
-                confirmYesButton.onclick = () => {
-                    confirmModal.style.display = 'none';
-                    onConfirm();
-                };
+            confirmYesButton.onclick = () => {
+                confirmModal.style.display = 'none';
+                onConfirm();
+            };
 
-                confirmNoButton.onclick = () => {
-                    confirmModal.style.display = 'none';
-                };
-            }
+            confirmNoButton.onclick = () => {
+                confirmModal.style.display = 'none';
+            };
+        }
 
-            function renderGroupList(groups) {
-                groupList.innerHTML = '';
-                if (groups.length === 0) {
-                    const emptyItem = document.createElement('li');
-                    emptyItem.className = 'py-3 text-center text-gray-500';
-                    emptyItem.textContent = 'No se ha añadido ningún grupo todavía.';
-                    groupList.appendChild(emptyItem);
-                } else {
-                    groups.forEach(group => {
-                        const listItem = document.createElement('li');
-                        listItem.className = 'py-4 px-4 flex flex-col list-item';
+        function renderGroupList(groups) {
+            groupList.innerHTML = '';
+            if (groups.length === 0) {
+                const emptyItem = document.createElement('li');
+                emptyItem.className = 'py-3 text-center text-gray-500';
+                emptyItem.textContent = 'No se ha añadido ningún grupo todavía.';
+                groupList.appendChild(emptyItem);
+            } else {
+                groups.forEach(group => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'py-4 px-4 flex flex-col list-item';
 
-                        const header = document.createElement('div');
-                        header.className = 'flex items-center justify-between mb-2 cursor-pointer';
-                        header.innerHTML = `
-                            <div class="flex items-center space-x-4 flex-1">
-                                ${group.profilePic ? `<img src="${group.profilePic}" alt="${group.name}" class="w-12 h-12 rounded-full object-cover shadow-sm border border-gray-200">` : ''}
-                                <div>
-                                    <div class="font-bold text-gray-800 text-lg">${group.name}</div>
-                                    <div class="text-sm text-gray-500">
-                                        Año: ${group.year} | Tipo: ${group.type}
-                                    </div>
+                    const header = document.createElement('div');
+                    header.className = 'flex items-center justify-between mb-2 cursor-pointer';
+                    header.innerHTML = `
+                        <div class="flex items-center space-x-4 flex-1">
+                            ${group.profilePic ? `<img src="${group.profilePic}" alt="${group.name}" class="w-12 h-12 rounded-full object-cover shadow-sm border border-gray-200">` : ''}
+                            <div>
+                                <div class="font-bold text-gray-800 text-lg">${group.name}</div>
+                                <div class="text-sm text-gray-500">
+                                    Año: ${group.year} | Tipo: ${group.type}
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-2 edit-buttons">
-                                <button class="text-gray-400 hover:text-blue-500 font-bold text-lg leading-none transition duration-200 edit-group-button" data-group-id="${group.id}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
-                                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                                    </svg>
-                                </button>
-                                <button class="text-gray-400 hover:text-red-500 font-bold text-xl leading-none transition duration-200 delete-group-button" data-group-id="${group.id}">
-                                    ×
-                                </button>
+                        </div>
+                        <div class="flex items-center space-x-2 edit-buttons">
+                            <button class="text-gray-400 hover:text-blue-500 font-bold text-lg leading-none transition duration-200 edit-group-button" data-group-id="${group.id}">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                </svg>
+                            </button>
+                            <button class="text-gray-400 hover:text-red-500 font-bold text-xl leading-none transition duration-200 delete-group-button" data-group-id="${group.id}">
+                                ×
+                            </button>
+                        </div>
+                    `;
+
+                    const albumsContainerEl = document.createElement('div');
+                    albumsContainerEl.className = 'albums-list mt-3 pl-16 hidden';
+                    
+                    if (group.albums && group.albums.length > 0) {
+                        albumsContainerEl.innerHTML = `
+                            <h4 class="font-semibold text-gray-700 mb-2">Álbumes:</h4>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                ${group.albums.map((album, index) => `
+                                    <div class="flex flex-col items-center text-center album-card cursor-pointer" data-album-index="${index}">
+                                        <img src="${album.photoUrl}" alt="${album.name}" class="w-20 h-20 rounded-lg object-cover shadow-sm border border-gray-200">
+                                        <div class="text-xs text-gray-600 mt-1 truncate w-full">${album.name}</div>
+                                        <div class="text-xs text-gray-400">${album.releaseDate}</div>
+                                    </div>
+                                `).join('')}
                             </div>
                         `;
-
-                        const albumsContainerEl = document.createElement('div');
-                        albumsContainerEl.className = 'albums-list mt-3 pl-16 hidden';
-                        
-                        if (group.albums && group.albums.length > 0) {
-                            albumsContainerEl.innerHTML = `
-                                <h4 class="font-semibold text-gray-700 mb-2">Álbumes:</h4>
-                                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                    ${group.albums.map((album, index) => `
-                                        <div class="flex flex-col items-center text-center album-card cursor-pointer" data-album-index="${index}">
-                                            <img src="${album.photoUrl}" alt="${album.name}" class="w-20 h-20 rounded-lg object-cover shadow-sm border border-gray-200">
-                                            <div class="text-xs text-gray-600 mt-1 truncate w-full">${album.name}</div>
-                                            <div class="text-xs text-gray-400">${album.releaseDate}</div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            `;
-                        } else {
-                            albumsContainerEl.innerHTML = `
-                                <div class="text-sm text-gray-500 pl-16">No se han añadido álbumes.</div>
-                            `;
+                    } else {
+                        albumsContainerEl.innerHTML = `
+                            <div class="text-sm text-gray-500 pl-16">No se han añadido álbumes.</div>
+                        `;
+                    }
+                    
+                    header.addEventListener('click', (e) => {
+                        if (!e.target.closest('.delete-group-button') && !e.target.closest('.edit-group-button')) {
+                            albumsContainerEl.classList.toggle('hidden');
                         }
-                        
-                        header.addEventListener('click', (e) => {
-                            if (!e.target.closest('.delete-group-button') && !e.target.closest('.edit-group-button')) {
-                                albumsContainerEl.classList.toggle('hidden');
+                    });
+                    
+                    albumsContainerEl.querySelectorAll('.album-card').forEach(albumCard => {
+                        albumCard.addEventListener('click', () => {
+                            const albumIndex = parseInt(albumCard.dataset.albumIndex);
+                            const album = group.albums[albumIndex];
+                            if (album) {
+                                showSongsModal(album);
                             }
                         });
-                        
-                        albumsContainerEl.querySelectorAll('.album-card').forEach(albumCard => {
-                            albumCard.addEventListener('click', () => {
-                                const albumIndex = parseInt(albumCard.dataset.albumIndex);
-                                const album = group.albums[albumIndex];
-                                if (album) {
-                                    showSongsModal(album);
-                                }
-                            });
-                        });
-                        
-                        listItem.appendChild(header);
-                        listItem.appendChild(albumsContainerEl);
-                        groupList.appendChild(listItem);
+                    });
+                    
+                    listItem.appendChild(header);
+                    listItem.appendChild(albumsContainerEl);
+                    groupList.appendChild(listItem);
 
-                        // Eliminar grupo usando el modal de confirmación personalizado
-                        listItem.querySelector('.delete-group-button').addEventListener('click', async () => {
-                            const groupId = listItem.querySelector('.delete-group-button').dataset.groupId;
-                            showConfirmModal('¿Estás seguro de que quieres eliminar este grupo?', async () => {
-                                try {
-                                    const groupRef = doc(db, groupCollectionPath, groupId);
-                                    await deleteDoc(groupRef);
-                                    showMessage('Grupo eliminado con éxito.', 'success');
-                                } catch (e) {
-                                    console.error("Error al eliminar el documento: ", e);
-                                    showMessage('Error al eliminar el grupo.', 'error');
-                                }
-                            });
-                        });
-
-                        // Editar grupo
-                        listItem.querySelector('.edit-group-button').addEventListener('click', () => {
-                            editingGroupKey = listItem.querySelector('.edit-group-button').dataset.groupId;
-                            const groupToEdit = groups.find(g => g.id === editingGroupKey);
-                            
-                            groupNameInput.value = groupToEdit.name;
-                            groupNameInput.setAttribute('disabled', 'true');
-                            debutYearInput.value = groupToEdit.year;
-                            groupTypeInput.value = groupToEdit.type;
-                            profilePicInput.value = groupToEdit.profilePic;
-
-                            albumsContainer.innerHTML = '';
-                            groupToEdit.albums.forEach(album => addAlbumField(album));
-
-                            mainActionButton.textContent = 'Guardar Cambios';
-                            cancelEditButton.classList.remove('hidden');
+                    listItem.querySelector('.delete-group-button').addEventListener('click', async () => {
+                        const groupId = listItem.querySelector('.delete-group-button').dataset.groupId;
+                        showConfirmModal('¿Estás seguro de que quieres eliminar este grupo?', async () => {
+                            try {
+                                const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
+                                const groupRef = doc(db, groupCollectionPath, groupId);
+                                await deleteDoc(groupRef);
+                                showMessage('Grupo eliminado con éxito.', 'success');
+                            } catch (e) {
+                                console.error("Error al eliminar el documento: ", e);
+                                showMessage('Error al eliminar el grupo.', 'error');
+                            }
                         });
                     });
-                }
+
+                    listItem.querySelector('.edit-group-button').addEventListener('click', () => {
+                        editingGroupKey = listItem.querySelector('.edit-group-button').dataset.groupId;
+                        const groupToEdit = groups.find(g => g.id === editingGroupKey);
+                        
+                        groupNameInput.value = groupToEdit.name;
+                        groupNameInput.setAttribute('disabled', 'true');
+                        debutYearInput.value = groupToEdit.year;
+                        groupTypeInput.value = groupToEdit.type;
+                        profilePicInput.value = groupToEdit.profilePic;
+
+                        albumsContainer.innerHTML = '';
+                        groupToEdit.albums.forEach(album => addAlbumField(album));
+
+                        mainActionButton.textContent = 'Guardar Cambios';
+                        cancelEditButton.classList.remove('hidden');
+                    });
+                });
             }
+        }
 
-            function showSongsModal(album) {
-                modalTitle.textContent = `Canciones de '${album.name}'`;
-                modalSongList.innerHTML = '';
-                if (album.songs && album.songs.length > 0) {
-                    album.songs.forEach(song => {
-                        const songItem = document.createElement('li');
-                        songItem.className = 'bg-gray-100 p-2 rounded-lg text-sm text-gray-800 song-list-item';
-                        songItem.textContent = song;
-                        modalSongList.appendChild(songItem);
-                    });
+        function showSongsModal(album) {
+            modalTitle.textContent = `Canciones de '${album.name}'`;
+            modalSongList.innerHTML = '';
+            if (album.songs && album.songs.length > 0) {
+                album.songs.forEach(song => {
+                    const songItem = document.createElement('li');
+                    songItem.className = 'bg-gray-100 p-2 rounded-lg text-sm text-gray-800 song-list-item';
+                    songItem.textContent = song;
+                    modalSongList.appendChild(songItem);
+                });
+            } else {
+                const noSongs = document.createElement('li');
+                noSongs.className = 'text-center text-gray-500';
+                noSongs.textContent = 'No se han añadido canciones para este álbum.';
+                modalSongList.appendChild(noSongs);
+            }
+            songsModal.style.display = 'flex';
+        }
+
+        function setupRealtimeListener() {
+            const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
+            const q = query(collection(db, groupCollectionPath));
+
+            onSnapshot(q, (querySnapshot) => {
+                const groupsData = [];
+                querySnapshot.forEach((doc) => {
+                    groupsData.push({ ...doc.data(), id: doc.id });
+                });
+                
+                const sortedGroups = groupsData.sort((a, b) => a.name.localeCompare(b.name));
+                renderGroupList(sortedGroups);
+            }, (error) => {
+                console.error("Error al obtener datos en tiempo real:", error);
+                document.getElementById('statusInfo').textContent = `Error al cargar los datos. Por favor, revisa tus reglas de seguridad de Firestore.`;
+                showMessage('Error: no se pueden cargar los datos. Revisa las reglas de seguridad.', 'error');
+            });
+        }
+        
+        // Inicializar Firebase
+        try {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    document.getElementById('statusInfo').textContent = `Conectado. ID de usuario: ${currentUserId}`;
+                    setupRealtimeListener();
                 } else {
-                    const noSongs = document.createElement('li');
-                    noSongs.className = 'text-center text-gray-500';
-                    noSongs.textContent = 'No se han añadido canciones para este álbum.';
-                    modalSongList.appendChild(noSongs);
+                    document.getElementById('statusInfo').textContent = 'Autenticando...';
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Error al autenticar:", error);
+                        document.getElementById('statusInfo').textContent = `Error de autenticación: ${error.message}`;
+                    }
                 }
-                songsModal.style.display = 'flex';
-            }
+            });
 
+        } catch (error) {
+            console.error("Error al inicializar Firebase:", error);
+            document.getElementById('statusInfo').textContent = `Error al inicializar Firebase: ${error.message}`;
+        }
+
+        // Event listener para el DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            groupNameInput = document.getElementById('groupNameInput');
+            debutYearInput = document.getElementById('debutYearInput');
+            groupTypeInput = document.getElementById('groupTypeInput');
+            profilePicInput = document.getElementById('profilePicInput');
+            mainActionButton = document.getElementById('mainActionButton');
+            cancelEditButton = document.getElementById('cancelEditButton');
+            addAlbumButton = document.getElementById('addAlbumButton');
+            albumsContainer = document.getElementById('albumsContainer');
+            groupList = document.getElementById('groupList');
+            messageBox = document.getElementById('messageBox');
+            songsModal = document.getElementById('songsModal');
+            modalTitle = document.getElementById('modalTitle');
+            modalSongList = document.getElementById('modalSongList');
+            closeButton = document.querySelector('.close-button');
+            confirmModal = document.getElementById('confirmModal');
+            confirmMessage = document.getElementById('confirmMessage');
+            confirmYesButton = document.getElementById('confirmYesButton');
+            confirmNoButton = document.getElementById('confirmNoButton');
+            
             closeButton.addEventListener('click', () => {
                 songsModal.style.display = 'none';
             });
@@ -486,7 +487,6 @@
                 if (groupName && debutYear && groupType) {
                     const groupNameKey = groupName.toLowerCase();
 
-                    // Recolectar datos de los álbumes
                     const albums = [];
                     const albumWrappers = albumsContainer.querySelectorAll('.album-field-wrapper');
                     albumWrappers.forEach(wrapper => {
@@ -531,7 +531,6 @@
                         console.error("Error al añadir/actualizar el documento: ", e);
                         showMessage('Error al guardar el grupo.', 'error');
                     }
-
                 } else {
                     showMessage('Por favor, rellena los campos obligatorios: Nombre del grupo, Año de debut y Tipo de grupo.', 'error');
                 }
@@ -549,7 +548,5 @@
     </script>
 </body>
 </html>
-
-
 
 
