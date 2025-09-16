@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -157,19 +157,9 @@
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
         // Variables de Firebase y de estado globales
-        // Por favor, reemplaza los valores de estas variables con tu propia configuración de Firebase.
-        // **IMPORTANTE**: No compartas tu apiKey con nadie.
-       const firebaseConfig = {
-  apiKey: "AIzaSyCtSnW0uIBDPyyvU-lGM0SZS7NAASGsapY",
-  authDomain: "kpop-43dff.firebaseapp.com",
-  projectId: "kpop-43dff",
-  storageBucket: "kpop-43dff.firebasestorage.app",
-  messagingSenderId: "48060551016",
-  appId: "1:48060551016:web:00db02f9780a25fee110dd",
-  measurementId: "G-6YXPT205MP"
-};
-        const appId = firebaseConfig.projectId; // Usa el projectId como el appId
-        const initialAuthToken = null; // No se necesita para este tipo de autenticación
+        // La configuración de Firebase se inyecta automáticamente.
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // Usa el appId del entorno si está disponible
 
         let db;
         let auth;
@@ -451,6 +441,7 @@
                 db = getFirestore(app);
 
                 document.getElementById('statusInfo').textContent = 'Autenticando...';
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
@@ -499,7 +490,7 @@
                         const releaseDate = wrapper.querySelector('.album-date-input').value.trim();
                         
                         const songs = [];
-                        const songInputs = wrapper.querySelectorAll('.song-name-input');
+                        const songInputs = wrapper.querySelector('.song-list').querySelectorAll('.song-name-input');
                         songInputs.forEach(input => {
                             if (input.value.trim()) {
                                 songs.push(input.value.trim());
@@ -555,8 +546,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
