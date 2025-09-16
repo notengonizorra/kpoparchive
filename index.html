@@ -156,20 +156,15 @@
         import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
-        // Establece el nivel de registro para depuración
-        setLogLevel('debug');
-        
-        // Variables globales de Firebase que son proporcionadas por el entorno
+        // Variables de Firebase y de estado globales (ahora en el ámbito correcto)
         const firebaseConfig = JSON.parse(__firebase_config);
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
         let db;
         let auth;
-        let currentUserId = null;
         let editingGroupKey = null;
 
-        // Variables de elementos del DOM (declaradas globalmente para ser accesibles)
+        // Variables de elementos del DOM
         let groupNameInput, debutYearInput, groupTypeInput, profilePicInput, mainActionButton, cancelEditButton, addAlbumButton, albumsContainer, groupList, messageBox, songsModal, modalTitle, modalSongList, closeButton, confirmModal, confirmMessage, confirmYesButton, confirmNoButton;
 
         // Funciones de utilidad
@@ -331,7 +326,7 @@
                     
                     albumsContainerEl.querySelectorAll('.album-card').forEach(albumCard => {
                         albumCard.addEventListener('click', () => {
-                            const albumIndex = parseInt(albumCard.dataset.albumIndex);
+                            const albumIndex = parseInt(albumCard.dataset.album-index);
                             const album = group.albums[albumIndex];
                             if (album) {
                                 showSongsModal(album);
@@ -416,39 +411,9 @@
             });
         }
         
-        // Inicializar Firebase
-        try {
-            const app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    currentUserId = user.uid;
-                    document.getElementById('statusInfo').textContent = `Conectado. ID de usuario: ${currentUserId}`;
-                    setupRealtimeListener();
-                } else {
-                    document.getElementById('statusInfo').textContent = 'Autenticando...';
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Error al autenticar:", error);
-                        document.getElementById('statusInfo').textContent = `Error de autenticación: ${error.message}`;
-                    }
-                }
-            });
-
-        } catch (error) {
-            console.error("Error al inicializar Firebase:", error);
-            document.getElementById('statusInfo').textContent = `Error al inicializar Firebase: ${error.message}`;
-        }
-
-        // Event listener para el DOM
-        document.addEventListener('DOMContentLoaded', () => {
+        // Función principal de inicialización
+        function initApp() {
+            // Obtener todos los elementos del DOM y asignarlos a las variables
             groupNameInput = document.getElementById('groupNameInput');
             debutYearInput = document.getElementById('debutYearInput');
             groupTypeInput = document.getElementById('groupTypeInput');
@@ -468,6 +433,37 @@
             confirmYesButton = document.getElementById('confirmYesButton');
             confirmNoButton = document.getElementById('confirmNoButton');
             
+            // Inicializar Firebase
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        document.getElementById('statusInfo').textContent = `Conectado. ID de usuario: ${user.uid}`;
+                        setupRealtimeListener();
+                    } else {
+                        document.getElementById('statusInfo').textContent = 'Autenticando...';
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (error) {
+                            console.error("Error al autenticar:", error);
+                            document.getElementById('statusInfo').textContent = `Error de autenticación: ${error.message}`;
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                document.getElementById('statusInfo').textContent = `Error al inicializar Firebase: ${error.message}`;
+            }
+
+            // Añadir Event Listeners
             closeButton.addEventListener('click', () => {
                 songsModal.style.display = 'none';
             });
@@ -544,7 +540,10 @@
                     mainActionButton.click();
                 }
             });
-        });
+        }
+        
+        // Iniciar la aplicación cuando el DOM esté completamente cargado
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
