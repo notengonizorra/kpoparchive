@@ -529,8 +529,7 @@
             if (encodedData) {
                 try {
                     const base64 = decodeURIComponent(encodedData);
-                    const compressed = atob(base64);
-                    const decompressed = pako.inflate(compressed, { to: 'string' });
+                    const decompressed = pako.inflate(Uint8Array.from(atob(base64), c => c.charCodeAt(0)), { to: 'string' });
                     const parsedData = JSON.parse(decompressed);
                     if (Array.isArray(parsedData)) {
                         groupData = parsedData;
