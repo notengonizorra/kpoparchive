@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -157,9 +157,33 @@
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
         // Variables de Firebase y de estado globales
-        // La configuración de Firebase se inyecta automáticamente.
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // Usa el appId del entorno si está disponible
+        // La configuración de Firebase se inyecta automáticamente en este entorno, pero si la ejecutas localmente, debes pegarla aquí.
+        let firebaseConfig = {
+          apiKey: "AIzaSyBAhJ7Z4kG73JyD7eVQ3pR8XCKc3FZfbE0",
+          authDomain: "kpop-43dff.firebaseapp.com",
+  projectId: "kpop-43dff",
+  storageBucket: "kpop-43dff.firebasestorage.app",
+  messagingSenderId: "48060551016",
+  appId: "1:48060551016:web:00db02f9780a25fee110dd",
+  measurementId: "G-6YXPT205MP"
+};
+        let initialAuthToken = "TU_AUTH_TOKEN"; // Si tienes un token de autenticación
+        let appId = "TU_APP_ID"; // O el mismo que el de firebaseConfig.appId
+
+        // Intenta obtener la configuración y el token del entorno, si están disponibles
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                Object.assign(firebaseConfig, JSON.parse(__firebase_config));
+            }
+            if (typeof __initial_auth_token !== 'undefined') {
+                initialAuthToken = __initial_auth_token;
+            }
+            if (typeof __app_id !== 'undefined') {
+                appId = __app_id;
+            }
+        } catch (e) {
+            console.error("Error al cargar las variables del entorno:", e);
+        }
 
         let db;
         let auth;
@@ -441,8 +465,7 @@
                 db = getFirestore(app);
 
                 document.getElementById('statusInfo').textContent = 'Autenticando...';
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                if (initialAuthToken) {
+                if (initialAuthToken && initialAuthToken !== 'TU_AUTH_TOKEN') {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
