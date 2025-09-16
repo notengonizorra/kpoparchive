@@ -143,21 +143,12 @@
 
         // Establece el nivel de registro para depuración
         setLogLevel('debug');
-
-        const __app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = {
-  apiKey: "AIzaSyCtSnW0uIBDPyyvU-lGM0SZS7NAASGsapY",
-  authDomain: "kpop-43dff.firebaseapp.com",
-  projectId: "kpop-43dff",
-  storageBucket: "kpop-43dff.firebasestorage.app",
-  messagingSenderId: "48060551016",
-  appId: "1:48060551016:web:00db02f9780a25fee110dd",
-  measurementId: "G-6YXPT205MP"
-};
-
-        const __initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // Variables globales de Firebase
+        // Variables globales de Firebase que son proporcionadas por el entorno
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
         let db;
         let auth;
         let currentUserId = null;
@@ -184,13 +175,13 @@
 
             // Inicializar Firebase
             try {
-                const app = initializeApp(__firebase_config);
+                const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
                 // Autenticar al usuario
-                if (__initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
@@ -211,7 +202,7 @@
             }
 
             function setupRealtimeListener() {
-                const groupCollectionPath = `/artifacts/${__app_id}/public/data/kpop_groups`;
+                const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
                 const q = query(collection(db, groupCollectionPath));
 
                 onSnapshot(q, (querySnapshot) => {
@@ -489,7 +480,7 @@
                     };
 
                     try {
-                        const groupCollectionPath = `/artifacts/${__app_id}/public/data/kpop_groups`;
+                        const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
                         const docRef = doc(db, groupCollectionPath, groupNameKey);
                         await setDoc(docRef, groupData);
                         showMessage(`'${groupName}' ${editingGroupKey ? 'actualizado' : 'añadido'} correctamente.`, 'success');
@@ -517,3 +508,4 @@
     </script>
 </body>
 </html>
+
