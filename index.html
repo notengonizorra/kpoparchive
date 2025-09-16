@@ -153,7 +153,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
         // Establece el nivel de registro para depuración
@@ -226,6 +226,7 @@
                 const q = query(collection(db, groupCollectionPath));
 
                 onSnapshot(q, (querySnapshot) => {
+                    // Si llegamos aquí, los datos se cargaron con éxito.
                     const groupsData = [];
                     querySnapshot.forEach((doc) => {
                         groupsData.push({ ...doc.data(), id: doc.id });
@@ -233,6 +234,11 @@
                     
                     const sortedGroups = groupsData.sort((a, b) => a.name.localeCompare(b.name));
                     renderGroupList(sortedGroups);
+                }, (error) => {
+                    // Si hay un error, lo mostramos en el estado.
+                    console.error("Error al obtener datos en tiempo real:", error);
+                    statusInfo.textContent = `Error al cargar los datos. Por favor, revisa tus reglas de seguridad de Firestore.`;
+                    showMessage('Error: no se pueden cargar los datos. Revisa las reglas de seguridad.', 'error');
                 });
             }
 
@@ -543,5 +549,7 @@
     </script>
 </body>
 </html>
+
+
 
 
