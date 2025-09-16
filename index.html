@@ -67,6 +67,9 @@
 
     <div class="container mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-200">
         <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Rastreador de Grupos K-Pop</h1>
+        <div id="statusInfo" class="text-sm text-center mb-4 text-gray-500">
+            Cargando...
+        </div>
 
         <!-- Formulario para añadir/editar grupo y álbumes -->
         <div class="space-y-4 mb-6">
@@ -132,8 +135,34 @@
         </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
+        // Establece el nivel de registro para depuración
+        setLogLevel('debug');
+
+        const __app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = {
+  apiKey: "AIzaSyCtSnW0uIBDPyyvU-lGM0SZS7NAASGsapY",
+  authDomain: "kpop-43dff.firebaseapp.com",
+  projectId: "kpop-43dff",
+  storageBucket: "kpop-43dff.firebasestorage.app",
+  messagingSenderId: "48060551016",
+  appId: "1:48060551016:web:00db02f9780a25fee110dd",
+  measurementId: "G-6YXPT205MP"
+};
+
+        const __initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Variables globales de Firebase
+        let db;
+        let auth;
+        let currentUserId = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
             const groupNameInput = document.getElementById('groupNameInput');
             const debutYearInput = document.getElementById('debutYearInput');
             const groupTypeInput = document.getElementById('groupTypeInput');
@@ -144,31 +173,56 @@
             const albumsContainer = document.getElementById('albumsContainer');
             const groupList = document.getElementById('groupList');
             const messageBox = document.getElementById('messageBox');
+            const statusInfo = document.getElementById('statusInfo');
             
             const songsModal = document.getElementById('songsModal');
             const modalTitle = document.getElementById('modalTitle');
             const modalSongList = document.getElementById('modalSongList');
             const closeButton = document.querySelector('.close-button');
 
-            // Usamos un objeto Map para almacenar los grupos localmente
-            const groups = new Map();
             let editingGroupKey = null;
 
-            // Cargar datos desde localStorage al iniciar
-            function loadGroups() {
-                const storedGroups = localStorage.getItem('kpopGroups');
-                if (storedGroups) {
-                    const parsedGroups = JSON.parse(storedGroups);
-                    parsedGroups.forEach(group => {
-                        groups.set(group.name.toLowerCase(), group);
-                    });
-                    renderGroupList();
+            // Inicializar Firebase
+            try {
+                const app = initializeApp(__firebase_config);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autenticar al usuario
+                if (__initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
                 }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        statusInfo.textContent = `Conectado. ID de usuario: ${currentUserId}`;
+                        setupRealtimeListener();
+                    } else {
+                        statusInfo.textContent = 'Desconectado.';
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al inicializar Firebase o autenticar:", error);
+                statusInfo.textContent = `Error de conexión: ${error.message}`;
             }
 
-            // Guardar datos en localStorage
-            function saveGroups() {
-                localStorage.setItem('kpopGroups', JSON.stringify(Array.from(groups.values())));
+            function setupRealtimeListener() {
+                const groupCollectionPath = `/artifacts/${__app_id}/public/data/kpop_groups`;
+                const q = query(collection(db, groupCollectionPath));
+
+                onSnapshot(q, (querySnapshot) => {
+                    const groupsData = [];
+                    querySnapshot.forEach((doc) => {
+                        groupsData.push({ ...doc.data(), id: doc.id });
+                    });
+                    
+                    const sortedGroups = groupsData.sort((a, b) => a.name.localeCompare(b.name));
+                    renderGroupList(sortedGroups);
+                });
             }
 
             function showMessage(message, type) {
@@ -248,9 +302,9 @@
                 songField.querySelector('.remove-song-button').addEventListener('click', () => songField.remove());
             }
 
-            function renderGroupList() {
+            function renderGroupList(groups) {
                 groupList.innerHTML = '';
-                if (groups.size === 0) {
+                if (groups.length === 0) {
                     const emptyItem = document.createElement('li');
                     emptyItem.className = 'py-3 text-center text-gray-500';
                     emptyItem.textContent = 'No se ha añadido ningún grupo todavía.';
@@ -273,12 +327,12 @@
                                 </div>
                             </div>
                             <div class="flex items-center space-x-2 edit-buttons">
-                                <button class="text-gray-400 hover:text-blue-500 font-bold text-lg leading-none transition duration-200 edit-group-button" data-group-name="${group.name.toLowerCase()}">
+                                <button class="text-gray-400 hover:text-blue-500 font-bold text-lg leading-none transition duration-200 edit-group-button" data-group-id="${group.id}">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
                                       <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                                     </svg>
                                 </button>
-                                <button class="text-gray-400 hover:text-red-500 font-bold text-xl leading-none transition duration-200 delete-group-button" data-group-name="${group.name.toLowerCase()}">
+                                <button class="text-gray-400 hover:text-red-500 font-bold text-xl leading-none transition duration-200 delete-group-button" data-group-id="${group.id}">
                                     ×
                                 </button>
                             </div>
@@ -306,15 +360,12 @@
                             `;
                         }
                         
-                        // Añadir evento para mostrar/ocultar los álbumes
                         header.addEventListener('click', (e) => {
-                            // Prevenir que el clic en los botones de editar/borrar active el toggle
                             if (!e.target.closest('.delete-group-button') && !e.target.closest('.edit-group-button')) {
                                 albumsContainerEl.classList.toggle('hidden');
                             }
                         });
                         
-                        // Añadir evento para los álbumes
                         albumsContainerEl.querySelectorAll('.album-card').forEach(albumCard => {
                             albumCard.addEventListener('click', () => {
                                 const albumIndex = parseInt(albumCard.dataset.albumIndex);
@@ -330,22 +381,27 @@
                         groupList.appendChild(listItem);
 
                         // Eliminar grupo
-                        listItem.querySelector('.delete-group-button').addEventListener('click', () => {
-                            const groupName = listItem.querySelector('.font-bold').textContent;
-                            groups.delete(groupName.toLowerCase());
-                            saveGroups();
-                            renderGroupList();
-                            showMessage(`Se ha eliminado '${groupName}'.`, 'error');
+                        listItem.querySelector('.delete-group-button').addEventListener('click', async () => {
+                            if (confirm('¿Estás seguro de que quieres eliminar este grupo?')) {
+                                const groupId = listItem.querySelector('.delete-group-button').dataset.groupId;
+                                try {
+                                    const groupRef = doc(db, groupCollectionPath, groupId);
+                                    await deleteDoc(groupRef);
+                                    showMessage('Grupo eliminado con éxito.', 'success');
+                                } catch (e) {
+                                    console.error("Error al eliminar el documento: ", e);
+                                    showMessage('Error al eliminar el grupo.', 'error');
+                                }
+                            }
                         });
 
                         // Editar grupo
                         listItem.querySelector('.edit-group-button').addEventListener('click', () => {
-                            const groupName = listItem.querySelector('.font-bold').textContent;
-                            editingGroupKey = groupName.toLowerCase();
-                            const groupToEdit = groups.get(editingGroupKey);
+                            editingGroupKey = listItem.querySelector('.edit-group-button').dataset.groupId;
+                            const groupToEdit = groups.find(g => g.id === editingGroupKey);
                             
                             groupNameInput.value = groupToEdit.name;
-                            groupNameInput.setAttribute('disabled', 'true'); // No se puede cambiar el nombre del grupo
+                            groupNameInput.setAttribute('disabled', 'true');
                             debutYearInput.value = groupToEdit.year;
                             groupTypeInput.value = groupToEdit.type;
                             profilePicInput.value = groupToEdit.profilePic;
@@ -389,7 +445,7 @@
                 }
             });
 
-            mainActionButton.addEventListener('click', () => {
+            mainActionButton.addEventListener('click', async () => {
                 const groupName = groupNameInput.value.trim();
                 const debutYear = debutYearInput.value.trim();
                 const groupType = groupTypeInput.value;
@@ -397,10 +453,6 @@
 
                 if (groupName && debutYear && groupType) {
                     const groupNameKey = groupName.toLowerCase();
-                    if (!editingGroupKey && groups.has(groupNameKey)) {
-                        showMessage(`'${groupName}' ya está en la lista.`, 'error');
-                        return;
-                    }
 
                     // Recolectar datos de los álbumes
                     const albums = [];
@@ -428,7 +480,7 @@
                         }
                     });
 
-                    const newGroup = {
+                    const groupData = {
                         name: groupName,
                         year: debutYear,
                         type: groupType,
@@ -436,12 +488,18 @@
                         albums: albums
                     };
 
-                    groups.set(groupNameKey, newGroup);
-                    saveGroups();
-                    renderGroupList();
-                    showMessage(`'${groupName}' ${editingGroupKey ? 'actualizado' : 'añadido'} correctamente.`, 'success');
-                    
-                    clearForm();
+                    try {
+                        const groupCollectionPath = `/artifacts/${__app_id}/public/data/kpop_groups`;
+                        const docRef = doc(db, groupCollectionPath, groupNameKey);
+                        await setDoc(docRef, groupData);
+                        showMessage(`'${groupName}' ${editingGroupKey ? 'actualizado' : 'añadido'} correctamente.`, 'success');
+                        
+                        clearForm();
+                    } catch (e) {
+                        console.error("Error al añadir/actualizar el documento: ", e);
+                        showMessage('Error al guardar el grupo.', 'error');
+                    }
+
                 } else {
                     showMessage('Por favor, rellena los campos obligatorios: Nombre del grupo, Año de debut y Tipo de grupo.', 'error');
                 }
@@ -449,16 +507,12 @@
 
             cancelEditButton.addEventListener('click', clearForm);
             addAlbumButton.addEventListener('click', () => addAlbumField());
-
-            // Manejar la tecla Enter en el campo de nombre del grupo
+            
             groupNameInput.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {
                     mainActionButton.click();
                 }
             });
-            
-            // Cargar y renderizar la lista inicial
-            loadGroups();
         });
     </script>
 </body>
