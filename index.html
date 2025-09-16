@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rastreador de Grupos K-Pop</title>
+    <title>Rastreador de Grupos K-Pop (Local)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +20,7 @@
             background-color: #f9fafb;
         }
         .modal {
-            display: none; /* Ocultar por defecto */
+            display: none;
             position: fixed;
             z-index: 1000;
             left: 0;
@@ -68,7 +68,7 @@
     <div class="container mx-auto p-6 bg-white rounded-xl shadow-lg border border-gray-200">
         <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Rastreador de Grupos K-Pop</h1>
         <div id="statusInfo" class="text-sm text-center mb-4 text-gray-500">
-            Conectando con Firebase...
+            Usando almacenamiento local. Tus datos se guardan en el navegador.
         </div>
 
         <!-- Formulario para añadir/editar grupo y álbumes -->
@@ -112,8 +112,39 @@
             </button>
         </div>
 
+        <!-- Botones de Importar/Exportar -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+            <button id="exportButton" class="w-full sm:w-1/2 px-6 py-3 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 focus:outline-none transition duration-200">
+                Exportar Datos
+            </button>
+            <button id="importButton" class="w-full sm:w-1/2 px-6 py-3 bg-gray-700 text-white font-semibold rounded-lg shadow-md hover:bg-gray-800 focus:outline-none transition duration-200">
+                Importar Datos
+            </button>
+        </div>
+
         <!-- Mensaje de alerta -->
         <div id="messageBox" class="p-4 rounded-lg text-sm transition-all duration-300 hidden"></div>
+
+        <!-- Controles de búsqueda, filtro y ordenación -->
+        <div class="mb-6 space-y-4">
+            <input type="text" id="searchInput" placeholder="Buscar grupo por nombre..."
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+            
+            <div class="flex flex-col sm:flex-row gap-4">
+                <select id="groupTypeFilter" class="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                    <option value="all">Todos los tipos</option>
+                    <option value="Boy Group">Boy Group</option>
+                    <option value="Girl Group">Girl Group</option>
+                    <option value="Co-Ed">Co-Ed</option>
+                </select>
+
+                <select id="sortSelect" class="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                    <option value="name-asc">Nombre (A-Z)</option>
+                    <option value="year-asc">Año de debut (más antiguo)</option>
+                    <option value="year-desc">Año de debut (más reciente)</option>
+                </select>
+            </div>
+        </div>
 
         <!-- Lista de grupos K-Pop -->
         <div class="bg-gray-50 rounded-lg p-4 shadow-inner border border-gray-200">
@@ -121,6 +152,11 @@
             <ul id="groupList" class="divide-y divide-gray-200">
                 <!-- Los grupos se añadirán aquí dinámicamente -->
             </ul>
+        </div>
+
+        <!-- Controles de paginación -->
+        <div id="paginationControls" class="flex justify-center items-center mt-6 space-x-2">
+            <!-- Los botones de paginación se añadirán aquí -->
         </div>
     </div>
 
@@ -150,48 +186,14 @@
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-
-        // Variables de Firebase y de estado globales
-        // La configuración de Firebase se inyecta automáticamente en este entorno, pero si la ejecutas localmente, debes pegarla aquí.
-        let firebaseConfig = {
-          apiKey: "AIzaSyBSuEEIgDD7fzA9fvHqHa94NORUGWIJ4xI",
-  authDomain: "jodermacho-e5621.firebaseapp.com",
-  projectId: "jodermacho-e5621",
-  storageBucket: "jodermacho-e5621.firebasestorage.app",
-  messagingSenderId: "338142061329",
-  appId: "1:338142061329:web:94374a7f53d8c8297be2b0"
-};
-        let initialAuthToken = "TU_AUTH_TOKEN"; // Si tienes un token de autenticación
-        let appId = "TU_APP_ID"; // O el mismo que el de firebaseConfig.appId
-
-        // Intenta obtener la configuración y el token del entorno, si están disponibles
-        try {
-            if (typeof __firebase_config !== 'undefined') {
-                Object.assign(firebaseConfig, JSON.parse(__firebase_config));
-            }
-            if (typeof __initial_auth_token !== 'undefined') {
-                initialAuthToken = __initial_auth_token;
-            }
-            if (typeof __app_id !== 'undefined') {
-                appId = __app_id;
-            }
-        } catch (e) {
-            console.error("Error al cargar las variables del entorno:", e);
-        }
-
-        let db;
-        let auth;
+    <script>
+        // Variables de estado globales
         let editingGroupKey = null;
+        let groupData = [];
+        let currentPage = 1;
+        const groupsPerPage = 10;
+        let groupNameInput, debutYearInput, groupTypeInput, profilePicInput, mainActionButton, cancelEditButton, addAlbumButton, albumsContainer, groupList, messageBox, songsModal, modalTitle, modalSongList, closeButton, confirmModal, confirmMessage, confirmYesButton, confirmNoButton, exportButton, importButton, searchInput, groupTypeFilter, sortSelect, paginationControls;
 
-        // Variables de elementos del DOM
-        let groupNameInput, debutYearInput, groupTypeInput, profilePicInput, mainActionButton, cancelEditButton, addAlbumButton, albumsContainer, groupList, messageBox, songsModal, modalTitle, modalSongList, closeButton, confirmModal, confirmMessage, confirmYesButton, confirmNoButton;
-
-        // Funciones de utilidad
         function showMessage(message, type) {
             messageBox.textContent = message;
             messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
@@ -226,7 +228,7 @@
                         class="album-name-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.name || ''}">
                     <input type="url" placeholder="URL de la foto del álbum"
                         class="album-url-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.photoUrl || ''}">
-                    <input type="date"
+                    <input type="text" placeholder="Fecha (YYYY-MM-DD)"
                         class="album-date-input flex-1 p-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500" value="${album.releaseDate || ''}">
                     <button type="button" class="remove-album-button px-2 py-1 text-sm text-red-500 hover:text-red-700 font-bold">
                         ×
@@ -295,7 +297,7 @@
                 groups.forEach(group => {
                     const listItem = document.createElement('li');
                     listItem.className = 'py-4 px-4 flex flex-col list-item';
-
+                    
                     const header = document.createElement('div');
                     header.className = 'flex items-center justify-between mb-2 cursor-pointer';
                     header.innerHTML = `
@@ -327,13 +329,25 @@
                         albumsContainerEl.innerHTML = `
                             <h4 class="font-semibold text-gray-700 mb-2">Álbumes:</h4>
                             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                ${group.albums.map((album, index) => `
-                                    <div class="flex flex-col items-center text-center album-card cursor-pointer" data-album-index="${index}">
-                                        <img src="${album.photoUrl}" alt="${album.name}" class="w-20 h-20 rounded-lg object-cover shadow-sm border border-gray-200">
-                                        <div class="text-xs text-gray-600 mt-1 truncate w-full">${album.name}</div>
-                                        <div class="text-xs text-gray-400">${album.releaseDate}</div>
-                                    </div>
-                                `).join('')}
+                                ${group.albums.map((album, index) => {
+                                    const date = album.releaseDate;
+                                    let dateDisplay = 'Fecha desconocida';
+                                    if (date && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                        dateDisplay = date.split('-').reverse().join('/');
+                                    } else if (date && date.match(/^\d{4}-\d{2}$/)) {
+                                        dateDisplay = date.split('-').reverse().join('/');
+                                    } else if (date && date.match(/^\d{4}$/)) {
+                                        dateDisplay = date;
+                                    }
+
+                                    return `
+                                        <div class="flex flex-col items-center text-center album-card cursor-pointer" data-album-index="${index}">
+                                            <img src="${album.photoUrl}" alt="${album.name}" class="w-20 h-20 rounded-lg object-cover shadow-sm border border-gray-200">
+                                            <div class="text-xs text-gray-600 mt-1 truncate w-full">${album.name}</div>
+                                            <div class="text-xs text-gray-400">${dateDisplay}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
                             </div>
                         `;
                     } else {
@@ -350,7 +364,7 @@
                     
                     albumsContainerEl.querySelectorAll('.album-card').forEach(albumCard => {
                         albumCard.addEventListener('click', () => {
-                            const albumIndex = parseInt(albumCard.dataset.album-index);
+                            const albumIndex = parseInt(albumCard.dataset.albumIndex);
                             const album = group.albums[albumIndex];
                             if (album) {
                                 showSongsModal(album);
@@ -362,24 +376,18 @@
                     listItem.appendChild(albumsContainerEl);
                     groupList.appendChild(listItem);
 
-                    listItem.querySelector('.delete-group-button').addEventListener('click', async () => {
+                    listItem.querySelector('.delete-group-button').addEventListener('click', () => {
                         const groupId = listItem.querySelector('.delete-group-button').dataset.groupId;
-                        showConfirmModal('¿Estás seguro de que quieres eliminar este grupo?', async () => {
-                            try {
-                                const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
-                                const groupRef = doc(db, groupCollectionPath, groupId);
-                                await deleteDoc(groupRef);
-                                showMessage('Grupo eliminado con éxito.', 'success');
-                            } catch (e) {
-                                console.error("Error al eliminar el documento: ", e);
-                                showMessage('Error al eliminar el grupo.', 'error');
-                            }
+                        showConfirmModal('¿Estás seguro de que quieres eliminar este grupo?', () => {
+                            groupData = groupData.filter(g => g.id !== groupId);
+                            saveGroupsToLocalStorage();
+                            updateDisplay();
                         });
                     });
 
                     listItem.querySelector('.edit-group-button').addEventListener('click', () => {
                         editingGroupKey = listItem.querySelector('.edit-group-button').dataset.groupId;
-                        const groupToEdit = groups.find(g => g.id === editingGroupKey);
+                        const groupToEdit = groupData.find(g => g.id === editingGroupKey);
                         
                         groupNameInput.value = groupToEdit.name;
                         groupNameInput.setAttribute('disabled', 'true');
@@ -416,28 +424,154 @@
             songsModal.style.display = 'flex';
         }
 
-        function setupRealtimeListener() {
-            const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
-            const q = query(collection(db, groupCollectionPath));
+        function loadGroupsFromLocalStorage() {
+            const storedData = localStorage.getItem('kpopGroups');
+            if (storedData) {
+                try {
+                    groupData = JSON.parse(storedData);
+                } catch (e) {
+                    console.error("Error parsing local storage data:", e);
+                    groupData = [];
+                }
+            }
+            updateDisplay();
+        }
 
-            onSnapshot(q, (querySnapshot) => {
-                const groupsData = [];
-                querySnapshot.forEach((doc) => {
-                    groupsData.push({ ...doc.data(), id: doc.id });
-                });
-                
-                const sortedGroups = groupsData.sort((a, b) => a.name.localeCompare(b.name));
-                renderGroupList(sortedGroups);
-            }, (error) => {
-                console.error("Error al obtener datos en tiempo real:", error);
-                document.getElementById('statusInfo').textContent = `Error al cargar los datos. Por favor, revisa tus reglas de seguridad de Firestore.`;
-                showMessage('Error: no se pueden cargar los datos. Revisa las reglas de seguridad.', 'error');
+        function saveGroupsToLocalStorage() {
+            localStorage.setItem('kpopGroups', JSON.stringify(groupData));
+            showMessage('Datos guardados localmente.', 'success');
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(groupData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'grupos_kpop.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showMessage('Datos exportados a grupos_kpop.json', 'success');
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.style.display = 'none';
+
+            input.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        if (Array.isArray(importedData)) {
+                            groupData = importedData;
+                            saveGroupsToLocalStorage();
+                            updateDisplay();
+                            showMessage('Datos importados con éxito.', 'success');
+                        } else {
+                            showMessage('El archivo seleccionado no tiene un formato válido.', 'error');
+                        }
+                    } catch (error) {
+                        showMessage('Error al leer el archivo. Asegúrate de que es un archivo JSON válido.', 'error');
+                    }
+                };
+                reader.readAsText(file);
             });
+
+            document.body.appendChild(input);
+            input.click();
+            document.body.removeChild(input);
+        }
+
+        function updateDisplay() {
+            let filteredGroups = [...groupData];
+
+            // 1. Filtrar
+            const searchTerm = searchInput.value.toLowerCase();
+            const filterType = groupTypeFilter.value;
+
+            if (searchTerm) {
+                filteredGroups = filteredGroups.filter(group => group.name.toLowerCase().includes(searchTerm));
+            }
+            if (filterType !== 'all') {
+                filteredGroups = filteredGroups.filter(group => group.type === filterType);
+            }
+
+            // 2. Ordenar
+            const sortBy = sortSelect.value;
+            if (sortBy === 'name-asc') {
+                filteredGroups.sort((a, b) => a.name.localeCompare(b.name));
+            } else if (sortBy === 'year-asc') {
+                filteredGroups.sort((a, b) => a.year - b.year);
+            } else if (sortBy === 'year-desc') {
+                filteredGroups.sort((a, b) => b.year - a.year);
+            }
+
+            // 3. Paginar
+            const startIndex = (currentPage - 1) * groupsPerPage;
+            const endIndex = startIndex + groupsPerPage;
+            const groupsToDisplay = filteredGroups.slice(startIndex, endIndex);
+
+            // 4. Renderizar
+            renderGroupList(groupsToDisplay);
+            renderPaginationControls(filteredGroups.length);
+        }
+
+        function renderPaginationControls(totalGroups) {
+            paginationControls.innerHTML = '';
+            const totalPages = Math.ceil(totalGroups / groupsPerPage);
+            
+            if (totalPages <= 1) {
+                return;
+            }
+
+            // Botón de "Anterior"
+            const prevButton = document.createElement('button');
+            prevButton.textContent = 'Anterior';
+            prevButton.className = `px-3 py-1 rounded-lg text-sm font-semibold transition duration-200 ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'bg-gray-200 hover:bg-gray-300'}`;
+            prevButton.disabled = currentPage === 1;
+            prevButton.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updateDisplay();
+                }
+            });
+            paginationControls.appendChild(prevButton);
+
+            // Botones de número de página
+            for (let i = 1; i <= totalPages; i++) {
+                const pageButton = document.createElement('button');
+                pageButton.textContent = i;
+                pageButton.className = `px-3 py-1 rounded-lg text-sm font-semibold transition duration-200 ${i === currentPage ? 'bg-pink-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}`;
+                pageButton.addEventListener('click', () => {
+                    currentPage = i;
+                    updateDisplay();
+                });
+                paginationControls.appendChild(pageButton);
+            }
+
+            // Botón de "Siguiente"
+            const nextButton = document.createElement('button');
+            nextButton.textContent = 'Siguiente';
+            nextButton.className = `px-3 py-1 rounded-lg text-sm font-semibold transition duration-200 ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'bg-gray-200 hover:bg-gray-300'}`;
+            nextButton.disabled = currentPage === totalPages;
+            nextButton.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updateDisplay();
+                }
+            });
+            paginationControls.appendChild(nextButton);
         }
         
-        // Función principal de inicialización
         async function initApp() {
-            // Obtener todos los elementos del DOM y asignarlos a las variables
             groupNameInput = document.getElementById('groupNameInput');
             debutYearInput = document.getElementById('debutYearInput');
             groupTypeInput = document.getElementById('groupTypeInput');
@@ -456,35 +590,13 @@
             confirmMessage = document.getElementById('confirmMessage');
             confirmYesButton = document.getElementById('confirmYesButton');
             confirmNoButton = document.getElementById('confirmNoButton');
+            exportButton = document.getElementById('exportButton');
+            importButton = document.getElementById('importButton');
+            searchInput = document.getElementById('searchInput');
+            groupTypeFilter = document.getElementById('groupTypeFilter');
+            sortSelect = document.getElementById('sortSelect');
+            paginationControls = document.getElementById('paginationControls');
             
-            // Inicializar Firebase y autenticar
-            try {
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                document.getElementById('statusInfo').textContent = 'Autenticando...';
-                if (initialAuthToken && initialAuthToken !== 'TU_AUTH_TOKEN') {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                const user = auth.currentUser;
-                if (user) {
-                    document.getElementById('statusInfo').textContent = `Conectado. ID de usuario: ${user.uid}`;
-                    setupRealtimeListener();
-                } else {
-                     document.getElementById('statusInfo').textContent = `Error: No se pudo obtener el usuario.`;
-                }
-
-            } catch (error) {
-                console.error("Error durante la inicialización o autenticación:", error);
-                document.getElementById('statusInfo').textContent = `Error de conexión: ${error.message}`;
-                showMessage('Error de conexión. Inténtalo de nuevo más tarde.', 'error');
-            }
-
-            // Añadir Event Listeners
             closeButton.addEventListener('click', () => {
                 songsModal.style.display = 'none';
             });
@@ -495,14 +607,14 @@
                 }
             });
 
-            mainActionButton.addEventListener('click', async () => {
+            mainActionButton.addEventListener('click', () => {
                 const groupName = groupNameInput.value.trim();
                 const debutYear = debutYearInput.value.trim();
                 const groupType = groupTypeInput.value;
                 const profilePicUrl = profilePicInput.value.trim();
 
                 if (groupName && debutYear && groupType) {
-                    const groupNameKey = groupName.toLowerCase();
+                    const groupNameKey = groupName.toLowerCase().replace(/\s/g, '-');
 
                     const albums = [];
                     const albumWrappers = albumsContainer.querySelectorAll('.album-field-wrapper');
@@ -529,7 +641,8 @@
                         }
                     });
 
-                    const groupData = {
+                    const newGroupData = {
+                        id: editingGroupKey || groupNameKey,
                         name: groupName,
                         year: debutYear,
                         type: groupType,
@@ -537,17 +650,19 @@
                         albums: albums
                     };
 
-                    try {
-                        const groupCollectionPath = `/artifacts/${appId}/public/data/kpop_groups`;
-                        const docRef = doc(db, groupCollectionPath, groupNameKey);
-                        await setDoc(docRef, groupData);
-                        showMessage(`'${groupName}' ${editingGroupKey ? 'actualizado' : 'añadido'} correctamente.`, 'success');
-                        
-                        clearForm();
-                    } catch (e) {
-                        console.error("Error al añadir/actualizar el documento: ", e);
-                        showMessage('Error al guardar el grupo.', 'error');
+                    if (editingGroupKey) {
+                        const index = groupData.findIndex(g => g.id === editingGroupKey);
+                        if (index !== -1) {
+                            groupData[index] = newGroupData;
+                        }
+                    } else {
+                        newGroupData.id = groupNameKey;
+                        groupData.push(newGroupData);
                     }
+                    
+                    saveGroupsToLocalStorage();
+                    clearForm();
+                    updateDisplay();
                 } else {
                     showMessage('Por favor, rellena los campos obligatorios: Nombre del grupo, Año de debut y Tipo de grupo.', 'error');
                 }
@@ -561,11 +676,28 @@
                     mainActionButton.click();
                 }
             });
+            
+            searchInput.addEventListener('input', () => {
+                currentPage = 1;
+                updateDisplay();
+            });
+            groupTypeFilter.addEventListener('change', () => {
+                currentPage = 1;
+                updateDisplay();
+            });
+            sortSelect.addEventListener('change', () => {
+                currentPage = 1;
+                updateDisplay();
+            });
+
+
+            exportButton.addEventListener('click', exportData);
+            importButton.addEventListener('click', importData);
+
+            loadGroupsFromLocalStorage();
         }
         
-        // Iniciar la aplicación cuando el DOM esté completamente cargado
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
-
