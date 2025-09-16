@@ -135,6 +135,21 @@
         </div>
     </div>
 
+    <!-- Modal de confirmación -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content text-center">
+            <p id="confirmMessage" class="text-lg font-semibold mb-6">¿Estás seguro de que quieres eliminar este grupo?</p>
+            <div class="flex justify-center gap-4">
+                <button id="confirmYesButton" class="px-6 py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 focus:outline-none transition duration-200">
+                    Sí, eliminar
+                </button>
+                <button id="confirmNoButton" class="px-6 py-2 bg-gray-400 text-white rounded-lg shadow-md hover:bg-gray-500 focus:outline-none transition duration-200">
+                    No, cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -170,6 +185,11 @@
             const modalTitle = document.getElementById('modalTitle');
             const modalSongList = document.getElementById('modalSongList');
             const closeButton = document.querySelector('.close-button');
+
+            const confirmModal = document.getElementById('confirmModal');
+            const confirmMessage = document.getElementById('confirmMessage');
+            const confirmYesButton = document.getElementById('confirmYesButton');
+            const confirmNoButton = document.getElementById('confirmNoButton');
 
             let editingGroupKey = null;
 
@@ -292,6 +312,21 @@
                 songList.appendChild(songField);
                 songField.querySelector('.remove-song-button').addEventListener('click', () => songField.remove());
             }
+            
+            // Función para mostrar el modal de confirmación
+            function showConfirmModal(message, onConfirm) {
+                confirmMessage.textContent = message;
+                confirmModal.style.display = 'flex';
+                
+                confirmYesButton.onclick = () => {
+                    confirmModal.style.display = 'none';
+                    onConfirm();
+                };
+
+                confirmNoButton.onclick = () => {
+                    confirmModal.style.display = 'none';
+                };
+            }
 
             function renderGroupList(groups) {
                 groupList.innerHTML = '';
@@ -371,10 +406,10 @@
                         listItem.appendChild(albumsContainerEl);
                         groupList.appendChild(listItem);
 
-                        // Eliminar grupo
+                        // Eliminar grupo usando el modal de confirmación personalizado
                         listItem.querySelector('.delete-group-button').addEventListener('click', async () => {
-                            if (confirm('¿Estás seguro de que quieres eliminar este grupo?')) {
-                                const groupId = listItem.querySelector('.delete-group-button').dataset.groupId;
+                            const groupId = listItem.querySelector('.delete-group-button').dataset.groupId;
+                            showConfirmModal('¿Estás seguro de que quieres eliminar este grupo?', async () => {
                                 try {
                                     const groupRef = doc(db, groupCollectionPath, groupId);
                                     await deleteDoc(groupRef);
@@ -383,7 +418,7 @@
                                     console.error("Error al eliminar el documento: ", e);
                                     showMessage('Error al eliminar el grupo.', 'error');
                                 }
-                            }
+                            });
                         });
 
                         // Editar grupo
@@ -508,4 +543,5 @@
     </script>
 </body>
 </html>
+
 
