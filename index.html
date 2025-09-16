@@ -152,14 +152,24 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
-        // Variables de Firebase y de estado globales (ahora en el ámbito correcto)
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // Variables de Firebase y de estado globales
+        // Por favor, reemplaza los valores de estas variables con tu propia configuración de Firebase.
+        // **IMPORTANTE**: No compartas tu apiKey con nadie.
+        const firebaseConfig = {
+            apiKey: "TU_API_KEY",
+            authDomain: "TU_AUTH_DOMAIN",
+            projectId: "TU_PROJECT_ID",
+            storageBucket: "TU_STORAGE_BUCKET",
+            messagingSenderId: "TU_MESSAGING_SENDER_ID",
+            appId: "TU_APP_ID"
+        };
+        const appId = firebaseConfig.projectId; // Usa el projectId como el appId
+        const initialAuthToken = null; // No se necesita para este tipo de autenticación
+
         let db;
         let auth;
         let editingGroupKey = null;
@@ -412,7 +422,7 @@
         }
         
         // Función principal de inicialización
-        function initApp() {
+        async function initApp() {
             // Obtener todos los elementos del DOM y asignarlos a las variables
             groupNameInput = document.getElementById('groupNameInput');
             debutYearInput = document.getElementById('debutYearInput');
@@ -433,34 +443,31 @@
             confirmYesButton = document.getElementById('confirmYesButton');
             confirmNoButton = document.getElementById('confirmNoButton');
             
-            // Inicializar Firebase
+            // Inicializar Firebase y autenticar
             try {
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
-                
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        document.getElementById('statusInfo').textContent = `Conectado. ID de usuario: ${user.uid}`;
-                        setupRealtimeListener();
-                    } else {
-                        document.getElementById('statusInfo').textContent = 'Autenticando...';
-                        try {
-                            if (initialAuthToken) {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                            } else {
-                                await signInAnonymously(auth);
-                            }
-                        } catch (error) {
-                            console.error("Error al autenticar:", error);
-                            document.getElementById('statusInfo').textContent = `Error de autenticación: ${error.message}`;
-                        }
-                    }
-                });
+
+                document.getElementById('statusInfo').textContent = 'Autenticando...';
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                const user = auth.currentUser;
+                if (user) {
+                    document.getElementById('statusInfo').textContent = `Conectado. ID de usuario: ${user.uid}`;
+                    setupRealtimeListener();
+                } else {
+                     document.getElementById('statusInfo').textContent = `Error: No se pudo obtener el usuario.`;
+                }
 
             } catch (error) {
-                console.error("Error al inicializar Firebase:", error);
-                document.getElementById('statusInfo').textContent = `Error al inicializar Firebase: ${error.message}`;
+                console.error("Error durante la inicialización o autenticación:", error);
+                document.getElementById('statusInfo').textContent = `Error de conexión: ${error.message}`;
+                showMessage('Error de conexión. Inténtalo de nuevo más tarde.', 'error');
             }
 
             // Añadir Event Listeners
@@ -547,5 +554,6 @@
     </script>
 </body>
 </html>
+
 
 
